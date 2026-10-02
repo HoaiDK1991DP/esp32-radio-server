@@ -22,10 +22,11 @@ RADIO_GROUPS = {
 def generate_mp3_stream(source_url: str):
     """
     Sử dụng FFmpeg đọc luồng HLS, chuyển mã sang MP3 
-    xuất ra stdout cho ESP32 / Trình duyệt.
+    xuất ra stdout cho ESP32 / Trình duyệt / VLC.
     """
     command = [
         'ffmpeg',
+        '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
         '-reconnect', '1',
         '-reconnect_streamed', '1',
         '-reconnect_delay_max', '3',
@@ -42,7 +43,7 @@ def generate_mp3_stream(source_url: str):
         command,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
-        bufsize=10**6
+        bufsize=1024 * 64  # Bộ đệm 64KB giúp stream phản hồi ngay lập tức
     )
     
     try:
@@ -71,7 +72,11 @@ async def stream_radio(
 
     return StreamingResponse(
         generate_mp3_stream(source_url),
-        media_type="audio/mpeg"
+        media_type="audio/mpeg",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive"
+        }
     )
 
 @app.get("/")
