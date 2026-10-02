@@ -8,12 +8,11 @@ import uvicorn
 app = FastAPI(
     title="ESP32 Private Radio Transcoder",
     description="Server chuyển mã HLS/AAC sang MP3 cho ESP32 kèm Token bảo mật và Fallback",
-    version="3.5"
+    version="3.6"
 )
 
 # ---------------------------------------------------------
 # 1. MẬT KHẨU BẢO MẬT (TOKEN)
-# Đổi chuỗi này thành mật khẩu riêng của bạn
 # ---------------------------------------------------------
 SECRET_TOKEN = "pvt_123456"
 
@@ -23,7 +22,7 @@ SECRET_TOKEN = "pvt_123456"
 RADIO_GROUPS = {
     "vov1": [
         "https://str.vov.gov.vn/vovlive/vov1vov5Vietnamese.sdp_aac/playlist.m3u8",
-        "https://stream.vov.gov.vn/vov1.m3u8"
+        "https://str.vov.gov.vn/vovlive/vov1.sdp_aac/playlist.m3u8"
     ],
     "hanoi90": [
         "http://14.162.146.90:8000/HANOI90"
@@ -34,40 +33,19 @@ RADIO_GROUPS = {
     ],
     "vov2": [
         "https://audio-lss.vov.vn/live/vov2.m3u8",
-        "https://stream.vov.gov.vn/vov2.m3u8"
+        "https://str.vov.gov.vn/vovlive/vov2.sdp_aac/playlist.m3u8"
     ]
 }
 
 DEFAULT_FALLBACK_LIST = RADIO_GROUPS["vov1"]
 
 # ---------------------------------------------------------
-# 3. HÀM KIỂM TRA & TRANSCODE LUỒNG
+# 3. HÀM TRANSCODE DÒNG MÂM THANH MP3
 # ---------------------------------------------------------
-def check_stream_alive(url: str, timeout: int = 3) -> bool:
-    """Thăm dò nhanh luồng âm thanh bằng ffprobe trước khi phát."""
-    command = [
-        'ffprobe',
-        '-v', 'quiet',
-        '-select_streams', 'a:0',
-        '-show_entries', 'stream=codec_type',
-        '-of', 'default=noprint_wrappers=1:nokey=1',
-        '-timeout', str(timeout * 1000000),
-        url
-    ]
-    try:
-        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
-        return result.returncode == 0 and b'audio' in result.stdout
-    except Exception:
-        return False
-
 def generate_fallback_mp3_stream(urls: List[str]):
     """Đọc luồng âm thanh và xuất ra định dạng MP3 128kbps."""
     for url in urls:
-        if not check_stream_alive(url):
-            print(f"[FALLBACK LOG] Link lỗi/offline: {url} -> Thử link tiếp theo...")
-            continue
-
-        print(f"[FALLBACK LOG] Đang phát đài: {url}")
+        print(f"[RADIO LOG] Đang thử kết nối phát đài: {url}")
 
         command = [
             'ffmpeg',
@@ -100,7 +78,6 @@ def generate_fallback_mp3_stream(urls: List[str]):
                 has_data = True
                 yield chunk
         except GeneratorExit:
-            # Ngắt tiến trình lập tức khi ESP32 ngắt kết nối
             if process.poll() is None:
                 process.terminate()
             return
@@ -113,7 +90,7 @@ def generate_fallback_mp3_stream(urls: List[str]):
                     process.kill()
 
         if has_data:
-            print(f"[FALLBACK LOG] Luồng {url} bị gián đoạn, đang chuyển đài dự phòng...")
+            print(f"[RADIO LOG] Luồng {url} bị đứt, chuyển link tiếp theo...")
 
 # ---------------------------------------------------------
 # 4. ENDPOINTS API
@@ -124,7 +101,6 @@ async def stream_radio(
     url: Optional[str] = Query(None, description="URL stream direct (phân cách bằng dấu phẩy)"),
     station: Optional[str] = Query(None, description="Mã đài (vov1, hanoi90, vovgt_hcm, vov2)")
 ):
-    # Xác thực Token
     if token != SECRET_TOKEN:
         raise HTTPException(status_code=403, detail="Xác thực thất bại! Token không hợp lệ.")
 
@@ -139,7 +115,7 @@ async def stream_radio(
         else:
             raise HTTPException(
                 status_code=400,
-                detail=f"Mã đài '{station}' không đúng. Các đài có sẵn: {list(RADIO_GROUPS.keys())}"
+                detail=f"Mã đài '{station}' không hợp lệ. Danh sách: {list(RADIO_GROUPS.keys())}"
             )
     else:
         target_urls = DEFAULT_FALLBACK_LIST
