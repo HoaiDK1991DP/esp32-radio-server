@@ -242,14 +242,12 @@ async def stream_dynamic_youtube(token: Optional[str] = Query(None)):
             return
 
         while True:
-            # Lấy link theo vị trí hiện tại trong danh sách
             current_vid_url = PLAYLIST_ITEMS[CURRENT_INDEX]
             
             try:
                 source_url = get_youtube_audio_url(current_vid_url)
             except Exception as e:
                 print(f"[LỖI GET URL]: {e}")
-                # Nếu bài này lỗi, tự động nhảy sang bài kế tiếp để tránh kẹt
                 CURRENT_INDEX = (CURRENT_INDEX + 1) % len(PLAYLIST_ITEMS)
                 continue
 
@@ -280,7 +278,6 @@ async def stream_dynamic_youtube(token: Optional[str] = Query(None)):
                     ACTIVE_FFMPEG_PROCESS.kill()
                     ACTIVE_FFMPEG_PROCESS.wait()
             
-            # Hết 1 bài -> Tự động chuyển bài tiếp theo (Vòng lặp vô tận quay về 0 khi hết list)
             if PLAYLIST_ITEMS:
                 CURRENT_INDEX = (CURRENT_INDEX + 1) % len(PLAYLIST_ITEMS)
 
