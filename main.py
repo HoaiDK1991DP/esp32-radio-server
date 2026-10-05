@@ -50,6 +50,21 @@ def get_youtube_audio_url(youtube_url: str):
         'format': 'bestaudio/bestaudio*/best/worst',
         'noplaylist': True,
         'quiet': False,
+        # Chỉ định JS runtime cho EJS n challenge solver
+        'js_runtimes': {'node': {}},
+        # Tự động tải EJS solver script từ GitHub
+        'remote_components': ['ejs:github'],
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['web_safari', 'web'],
+            }
+        },
+        # Chống rate-limit: tăng thời gian chờ
+        'sleep_interval': 5,
+        'max_sleep_interval': 10,
+        'sleep_interval_requests': 1,
+        'retries': 5,
+        'fragment_retries': 5,
     }
 
     cookie_path = get_cookie_file()
@@ -69,8 +84,6 @@ def get_youtube_audio_url(youtube_url: str):
                 os.remove(cookie_path)
             except:
                 pass
-
-
 # =======================================================
 # GIAO DIỆN WEB REMOTE CONTROL (TRANG CHỦ)
 # =======================================================
