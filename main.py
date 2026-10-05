@@ -26,12 +26,13 @@ CURRENT_INDEX = 0
 ACTIVE_FFMPEG_PROCESS = None
 
 def get_youtube_audio_url(youtube_url: str):
-    """Dùng yt-dlp để lấy link stream audio trực tiếp từ YouTube (Có kèm cookies chống bot)"""
+    """Dùng yt-dlp để lấy link stream audio trực tiếp từ YouTube (Có cookies và skip authcheck)"""
     ydl_opts = {
         'format': 'bestaudio/best', 
         'noplaylist': True, 
         'quiet': False,
-        'cookiefile': 'www.youtube.com_cookies.txt'
+        'cookiefile': 'www.youtube.com_cookies.txt',
+        'extractor_args': {'youtubetab': {'skip': ['authcheck']}}
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -213,7 +214,8 @@ async def change_youtube_link(
         ydl_opts = {
             'extract_flat': True, 
             'quiet': True,
-            'cookiefile': 'www.youtube.com_cookies.txt'
+            'cookiefile': 'www.youtube.com_cookies.txt',
+            'extractor_args': {'youtubetab': {'skip': ['authcheck']}}
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
