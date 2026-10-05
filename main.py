@@ -11,7 +11,17 @@ app = FastAPI()
 # 1. MẬT KHẨU BẢO MẬT CHUNG CHO TOÀN BỘ HỆ THỐNG
 SECRET_TOKEN = "pvt_123456"
 
-# 2. DANH SÁCH ĐÀI RADIO TRUYỀN THỐNG 
+# 2. ĐƯỜNG DẪN TUYỆT ĐỐI ĐẾN FILE COOKIES (Khắc phục triệt để lỗi không tìm thấy file trên Render)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+COOKIE_FILE = os.path.join(BASE_DIR, "www.youtube.com_cookies.txt")
+
+# In log kiểm tra xem Render có nhận file cookies không khi khởi động
+if os.path.exists(COOKIE_FILE):
+    print(f"[HE THONG]: Tim thấy file Cookies tai: {COOKIE_FILE}")
+else:
+    print(f"[CANH BAO]: KHÔNG tìm thấy file Cookies tại: {COOKIE_FILE}")
+
+# 3. DANH SÁCH ĐÀI RADIO TRUYỀN THỐNG 
 RADIO_GROUPS = {
     "vov3": "https://str.vov.gov.vn/vovlive/vov3.sdp_aac/playlist.m3u8",
     "vovgt_hn": "https://play.vovgiaothong.vn/live/gthn/playlist.m3u8",
@@ -26,13 +36,18 @@ CURRENT_INDEX = 0
 ACTIVE_FFMPEG_PROCESS = None
 
 def get_youtube_audio_url(youtube_url: str):
-    """Dùng yt-dlp để lấy link stream audio trực tiếp từ YouTube (Có cookies và skip authcheck)"""
+    """Dùng yt-dlp để lấy link stream audio trực tiếp từ YouTube (Giả dạng Client Android/MWeb)"""
     ydl_opts = {
         'format': 'bestaudio/best', 
         'noplaylist': True, 
         'quiet': False,
-        'cookiefile': 'www.youtube.com_cookies.txt',
-        'extractor_args': {'youtubetab': {'skip': ['authcheck']}}
+        'cookiefile': COOKIE_FILE,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'mweb', 'ios'],
+                'skip': ['webpage', 'authcheck']
+            }
+        }
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -214,8 +229,13 @@ async def change_youtube_link(
         ydl_opts = {
             'extract_flat': True, 
             'quiet': True,
-            'cookiefile': 'www.youtube.com_cookies.txt',
-            'extractor_args': {'youtubetab': {'skip': ['authcheck']}}
+            'cookiefile': COOKIE_FILE,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'mweb', 'ios'],
+                    'skip': ['webpage', 'authcheck']
+                }
+            }
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
