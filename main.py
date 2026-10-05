@@ -26,8 +26,13 @@ CURRENT_INDEX = 0
 ACTIVE_FFMPEG_PROCESS = None
 
 def get_youtube_audio_url(youtube_url: str):
-    """Dùng yt-dlp để lấy link stream audio trực tiếp từ YouTube"""
-    ydl_opts = {'format': 'bestaudio/best', 'noplaylist': True, 'quiet': False}
+    """Dùng yt-dlp để lấy link stream audio trực tiếp từ YouTube (Có kèm cookies chống bot)"""
+    ydl_opts = {
+        'format': 'bestaudio/best', 
+        'noplaylist': True, 
+        'quiet': False,
+        'cookiefile': 'www.youtube.com_cookies.txt'
+    }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(youtube_url, download=False)
@@ -205,7 +210,11 @@ async def change_youtube_link(
         raise HTTPException(status_code=403, detail="Token khong hop le!")
     
     if "list=" in url:
-        ydl_opts = {'extract_flat': True, 'quiet': True}
+        ydl_opts = {
+            'extract_flat': True, 
+            'quiet': True,
+            'cookiefile': 'www.youtube.com_cookies.txt'
+        }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             if 'entries' in info:
