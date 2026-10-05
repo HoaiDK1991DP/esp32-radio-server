@@ -1,5 +1,6 @@
 import os
 import subprocess
+import tempfile
 from typing import Optional
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import StreamingResponse, HTMLResponse
@@ -11,17 +12,7 @@ app = FastAPI()
 # 1. MẬT KHẨU BẢO MẬT CHUNG CHO TOÀN BỘ HỆ THỐNG
 SECRET_TOKEN = "pvt_123456"
 
-# 2. ĐƯỜNG DẪN TUYỆT ĐỐI ĐẾN FILE COOKIES (Khắc phục triệt để lỗi không tìm thấy file trên Render)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-COOKIE_FILE = os.path.join(BASE_DIR, "www.youtube.com_cookies.txt")
-
-# In log kiểm tra xem Render có nhận file cookies không khi khởi động
-if os.path.exists(COOKIE_FILE):
-    print(f"[HE THONG]: Tim thấy file Cookies tai: {COOKIE_FILE}")
-else:
-    print(f"[CANH BAO]: KHÔNG tìm thấy file Cookies tại: {COOKIE_FILE}")
-
-# 3. DANH SÁCH ĐÀI RADIO TRUYỀN THỐNG 
+# 2. DANH SÁCH ĐÀI RADIO TRUYỀN THỐNG 
 RADIO_GROUPS = {
     "vov3": "https://str.vov.gov.vn/vovlive/vov3.sdp_aac/playlist.m3u8",
     "vovgt_hn": "https://play.vovgiaothong.vn/live/gthn/playlist.m3u8",
@@ -35,20 +26,36 @@ PLAYLIST_ITEMS = []
 CURRENT_INDEX = 0
 ACTIVE_FFMPEG_PROCESS = None
 
+
+def get_cookie_file():
+    """Tạo file cookie tạm từ biến môi trường YT_COOKIES_B64, trả về đường dẫn hoặc None"""
+    cookies_content = os.getenv("YT_COOKIES_B64")
+    if not cookies_content:
+        print("[CẢNH BÁO] Không tìm thấy biến YT_COOKIES_B64 trên Render.")
+        return None
+    try:
+        f = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8')
+        f.write(cookies_content)
+        f.close()
+        print(f"[INFO] Đã tạo file cookie tạm tại: {f.name}")
+        return f.name
+    except Exception as e:
+        print(f"[LỖI] Không tạo được file cookie tạm: {e}")
+        return None
+
+
 def get_youtube_audio_url(youtube_url: str):
-    """Dùng yt-dlp để lấy link stream audio trực tiếp từ YouTube (Giả dạng Client Android/MWeb)"""
+    """Dùng yt-dlp để lấy link stream audio trực tiếp từ YouTube"""
     ydl_opts = {
-        'format': 'bestaudio/best', 
-        'noplaylist': True, 
+        'format': 'bestaudio/best',
+        'noplaylist': True,
         'quiet': False,
-        'cookiefile': COOKIE_FILE,
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'mweb', 'ios'],
-                'skip': ['webpage', 'authcheck']
-            }
-        }
     }
+
+    cookie_path = get_cookie_file()
+    if cookie_path:
+        ydl_opts['cookiefile'] = cookie_path
+
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(youtube_url, download=False)
@@ -56,6 +63,13 @@ def get_youtube_audio_url(youtube_url: str):
     except Exception as e:
         print(f"[LỖI YOUTUBE]: Không thể trích xuất link từ {youtube_url} -> Chi tiết: {e}")
         raise e
+    finally:
+        if cookie_path and os.path.exists(cookie_path):
+            try:
+                os.remove(cookie_path)
+            except:
+                pass
+
 
 # =======================================================
 # GIAO DIỆN WEB REMOTE CONTROL (TRANG CHỦ)
@@ -150,6 +164,7 @@ async def control_panel():
     </html>
     """
 
+
 # =======================================================
 # PHẦN 1: STREAM ĐÀI RADIO TRUYỀN THỐNG
 # =======================================================
@@ -169,14 +184,14 @@ def generate_mp3_stream(source_url: str):
         '-f', 'mp3',
         'pipe:1'
     ]
-    
+
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         bufsize=1024 * 32
     )
-    
+
     try:
         while True:
             chunk = process.stdout.read(2048)
@@ -189,6 +204,7 @@ def generate_mp3_stream(source_url: str):
         if process.poll() is None:
             process.kill()
             process.wait()
+
 
 @app.get("/stream")
 async def stream_radio(
@@ -212,6 +228,7 @@ async def stream_radio(
         }
     )
 
+
 # =======================================================
 # PHẦN 2: HỆ THỐNG YOUTUBE PLAYLIST & VÒNG LẶP VĨNH VIỄN
 # =======================================================
@@ -221,31 +238,35 @@ async def change_youtube_link(
     token: Optional[str] = Query(None)
 ):
     global PLAYLIST_ITEMS, CURRENT_INDEX, ACTIVE_FFMPEG_PROCESS
-    
+
     if token != SECRET_TOKEN:
         raise HTTPException(status_code=403, detail="Token khong hop le!")
-    
+
     if "list=" in url:
         ydl_opts = {
-            'extract_flat': True, 
+            'extract_flat': True,
             'quiet': True,
-            'cookiefile': COOKIE_FILE,
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android', 'mweb', 'ios'],
-                    'skip': ['webpage', 'authcheck']
-                }
-            }
         }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            if 'entries' in info:
-                PLAYLIST_ITEMS = [
-                    entry.get('url') or f"https://www.youtube.com/watch?v={entry.get('id')}" 
-                    for entry in info['entries'] if entry.get('url') or entry.get('id')
-                ]
-            else:
-                PLAYLIST_ITEMS = [url]
+        cookie_path = get_cookie_file()
+        if cookie_path:
+            ydl_opts['cookiefile'] = cookie_path
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                if 'entries' in info:
+                    PLAYLIST_ITEMS = [
+                        entry.get('url') or f"https://www.youtube.com/watch?v={entry.get('id')}"
+                        for entry in info['entries'] if entry.get('url') or entry.get('id')
+                    ]
+                else:
+                    PLAYLIST_ITEMS = [url]
+        finally:
+            if cookie_path and os.path.exists(cookie_path):
+                try:
+                    os.remove(cookie_path)
+                except:
+                    pass
     else:
         PLAYLIST_ITEMS = [url]
 
@@ -256,10 +277,11 @@ async def change_youtube_link(
         ACTIVE_FFMPEG_PROCESS.kill()
 
     return {
-        "status": "success", 
+        "status": "success",
         "message": f"Đã lưu thành công {len(PLAYLIST_ITEMS)} bài vào danh sách vòng lặp.",
         "total_tracks": len(PLAYLIST_ITEMS)
     }
+
 
 @app.get("/youtube/stream")
 async def stream_dynamic_youtube(token: Optional[str] = Query(None)):
@@ -268,13 +290,13 @@ async def stream_dynamic_youtube(token: Optional[str] = Query(None)):
 
     def generate_dynamic_stream():
         global ACTIVE_FFMPEG_PROCESS, PLAYLIST_ITEMS, CURRENT_INDEX
-        
+
         if not PLAYLIST_ITEMS:
             return
 
         while True:
             current_vid_url = PLAYLIST_ITEMS[CURRENT_INDEX]
-            
+
             try:
                 source_url = get_youtube_audio_url(current_vid_url)
             except Exception as e:
@@ -290,11 +312,11 @@ async def stream_dynamic_youtube(token: Optional[str] = Query(None)):
                 '-vn', '-acodec', 'libmp3lame', '-ab', '96k', '-ar', '32000', '-ac', '1', '-f', 'mp3',
                 'pipe:1'
             ]
-            
+
             ACTIVE_FFMPEG_PROCESS = subprocess.Popen(
-                command, stdout=subprocess.PIPE, stderr=None
+                command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
             )
-            
+
             try:
                 while True:
                     chunk = ACTIVE_FFMPEG_PROCESS.stdout.read(2048)
@@ -308,7 +330,7 @@ async def stream_dynamic_youtube(token: Optional[str] = Query(None)):
                 if ACTIVE_FFMPEG_PROCESS and ACTIVE_FFMPEG_PROCESS.poll() is None:
                     ACTIVE_FFMPEG_PROCESS.kill()
                     ACTIVE_FFMPEG_PROCESS.wait()
-            
+
             if PLAYLIST_ITEMS:
                 CURRENT_INDEX = (CURRENT_INDEX + 1) % len(PLAYLIST_ITEMS)
 
@@ -321,21 +343,24 @@ async def stream_dynamic_youtube(token: Optional[str] = Query(None)):
         }
     )
 
+
 @app.get("/youtube/skip")
 async def skip_track(token: Optional[str] = Query(None)):
     global ACTIVE_FFMPEG_PROCESS, PLAYLIST_ITEMS, CURRENT_INDEX
-    
+
     if token != SECRET_TOKEN:
         raise HTTPException(status_code=403, detail="Token khong hop le!")
 
     if ACTIVE_FFMPEG_PROCESS and ACTIVE_FFMPEG_PROCESS.poll() is None:
+        next_idx = (CURRENT_INDEX + 1) % len(PLAYLIST_ITEMS) if PLAYLIST_ITEMS else 0
         ACTIVE_FFMPEG_PROCESS.kill()
         return {
-            "status": "success", 
-            "message": f"Đã chuyển bài tiếp theo! (Đang ở bài số {CURRENT_INDEX + 1}/{len(PLAYLIST_ITEMS)})"
+            "status": "success",
+            "message": f"Đang chuyển sang bài {next_idx + 1}/{len(PLAYLIST_ITEMS)}"
         }
     else:
         return {"status": "error", "message": "Không có luồng YouTube nào đang chạy."}
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
