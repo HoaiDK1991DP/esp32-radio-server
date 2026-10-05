@@ -47,7 +47,7 @@ def get_cookie_file():
 def get_youtube_audio_url(youtube_url: str):
     """Dùng yt-dlp để lấy link stream audio trực tiếp từ YouTube"""
     ydl_opts = {
-        'format': 'bestaudio/best',
+        'format': 'bestaudio/bestaudio*/best/worst',
         'noplaylist': True,
         'quiet': False,
     }
