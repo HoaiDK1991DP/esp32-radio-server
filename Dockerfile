@@ -1,19 +1,23 @@
 FROM python:3.11-slim
 
-# Cài đặt ffmpeg (xử lý audio), nodejs + npm (JavaScript runtime cho yt-dlp)
+# Cài đặt ffmpeg + Node.js 20 (JS runtime cho yt-dlp EJS)
 RUN apt-get update && apt-get install -y \
     ffmpeg \
-    nodejs \
-    npm \
+    curl \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
+
+# Kiểm tra phiên bản Node.js
+RUN node --version
 
 WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Nâng cấp yt-dlp lên bản mới nhất (ghi đè bản trong requirements.txt)
-RUN pip install --no-cache-dir --upgrade yt-dlp
+# Cài yt-dlp với EJS solver scripts (bắt buộc cho n challenge)
+RUN pip install --no-cache-dir --upgrade "yt-dlp[default]"
 
 COPY . .
 
