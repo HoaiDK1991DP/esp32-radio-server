@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Cài đặt ffmpeg + Node.js 20 (JS runtime cho yt-dlp EJS)
+# Cài đặt ffmpeg, curl và Node.js 20 (yêu cầu cho EJS solver)
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     curl \
@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Kiểm tra phiên bản Node.js
+# Kiểm tra phiên bản Node.js (phải >= 20)
 RUN node --version
 
 WORKDIR /app
@@ -16,7 +16,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Cài yt-dlp với EJS solver scripts (bắt buộc cho n challenge)
+# Cài đặt yt-dlp bản đầy đủ (kèm EJS solver scripts)
 RUN pip install --no-cache-dir --upgrade "yt-dlp[default]"
 
 COPY . .
